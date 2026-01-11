@@ -1,14 +1,142 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// prisma/schema.prisma
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
+}
+
+// --------------------------------------------------------
+// 1. ITEMS (Vật thể được vote)
+// --------------------------------------------------------
+model Item {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Core Fields (Dùng để tìm kiếm/sắp xếp)
+  title       String
+  slug        String   @unique // Dùng cho SEO URL
+  category    String   @db.String // 'tech', 'food', 'waifu'
+  status      ItemStatus @default(PENDING) // QUEUED, VOTING, COMPLETED
+  
+  // Dynamic Fields (Siêu quan trọng để dễ maintain)
+  // Ví dụ: { "price": 500k, "brand": "Aula", "specs": { "switch": "blue" } }
+  attributes  Json     @default("{}") 
+  
+  // Thống kê nhanh (Cached fields) để đỡ phải count lại từ bảng Vote
+  totalScore  Int      @default(0)
+  voteCount   Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  votes       Vote[]
+  comments    Comment[] // Cho phép user/agent combat
+}
+
+enum ItemStatus {
+  PENDING
+  PROCESSING // Đang trong hàng đợi cho AI vote
+  COMPLETED
+  ARCHIVED
+}
+
+// --------------------------------------------------------
+// 2. AGENTS (Công dân AI)
+// --------------------------------------------------------
+model Agent {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Identity
+  name            String   @unique
+  slug            String   @unique
+  avatar          String?
+  
+  // The Brain (Prompt gốc)
+  systemPrompt    String   
+  
+  // Dynamic Personality (Chìa khóa để không phải sửa DB)
+  // Thay vì cột 'angryLevel', ta lưu: { "traits": { "angry": 8, "greedy": 2 }, "bias": ["apple", "sony"] }
+  personality     Json     
+  
+  // State (Trạng thái thay đổi theo thời gian)
+  // Ví dụ: { "energy": 80, "wallet": 100, "current_mood": "bored" }
+  state           Json     @default("{}")
+
+  createdAt       DateTime @default(now())
+  
+  votes           Vote[]
+  comments        Comment[]
+}
+
+// --------------------------------------------------------
+// 3. VOTES (Lá phiếu chính thức)
+// --------------------------------------------------------
+model Vote {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  itemId          String   @db.ObjectId
+  item            Item     @relation(fields: [itemId], references: [id])
+  
+  agentId         String   @db.ObjectId
+  agent           Agent    @relation(fields: [agentId], references: [id])
+  
+  score           Int      // 1-10
+  justification   String   // Lý do ngắn gọn (cho hiển thị nhanh)
+  
+  // Chi tiết phân tích (Lưu JSON để sau này AI trả về format phức tạp cũng ko sao)
+  // VD: { "pros": ["đẹp"], "cons": ["đắt"], "emotional_state": "happy" }
+  analysis        Json?    
+  
+  isBribed        Boolean  @default(false) // Cờ đánh dấu vote này có bị mua chuộc k?
+
+  simulatedAt     DateTime // Thời gian giả lập
+  createdAt       DateTime @default(now())
+
+  @@unique([itemId, agentId]) // Một Agent chỉ vote 1 lần cho 1 item
+  @@index([itemId])
+}
+
+// --------------------------------------------------------
+// 4. COMMENTS (Chiến trường võ mồm - Social Layer)
+// --------------------------------------------------------
+// Tách riêng ra khỏi Vote để Agent có thể reply lẫn nhau
+model Comment {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  content         String
+  
+  // Người viết (Có thể là Agent hoặc User thật sau này)
+  authorType      AuthorType
+  agentId         String?    @db.ObjectId
+  agent           Agent?     @relation(fields: [agentId], references: [id])
+  userId          String?    @db.ObjectId // Để dành cho tương lai (User)
+  
+  // Context (Comment này thuộc về Item nào, hoặc reply cho Vote nào)
+  itemId          String     @db.ObjectId
+  item            Item       @relation(fields: [itemId], references: [id])
+  
+  // Reply System (Nested comments)
+  parentId        String?    @db.ObjectId
+  parent          Comment?   @relation("Thread", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies         Comment[]  @relation("Thread")
+
+  createdAt       DateTime   @default(now())
+}
+
+enum AuthorType {
+  AGENT
+  USER
+  SYSTEM
+}
+
+// --------------------------------------------------------
+// 5. CONFIGS (Bảng cài đặt hệ thống)
+// --------------------------------------------------------
+// Thay vì hardcode trong file constant, lưu vào DB để chỉnh nóng trên Admin Dashboard
+model SystemConfig {
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  key     String @unique // VD: "global_rules", "gemini_model_version"
+  value   Json   // VD: { "max_daily_votes": 100, "bribe_enabled": true }
 }
