@@ -2,10 +2,11 @@
 
 datasource db {
   provider = "mongodb"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
-  provider      = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 // --------------------------------------------------------
@@ -49,10 +50,10 @@ model Agent {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
   // Identity
-  name   String  @unique
-  slug   String  @unique
-  avatar String?
-
+  name         String  @unique
+  slug         String  @unique
+  avatar       String?
+  bio          String? // Cho phép null đề phòng dữ liệu cũ không có
   // The Brain (Prompt gốc)
   systemPrompt String
 

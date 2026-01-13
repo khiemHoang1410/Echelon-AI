@@ -38,7 +38,7 @@ const VOTE_SCHEMA: Schema = {
 };
 
 export const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: "gemini-1.5-flash",
     generationConfig: {
         responseMimeType: "application/json",
         responseSchema: VOTE_SCHEMA, // No need to cast here anymore
