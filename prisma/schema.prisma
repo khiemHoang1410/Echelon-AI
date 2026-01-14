@@ -1,143 +1,111 @@
 // prisma/schema.prisma
 
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
+// --- XÃ HỘI AI (CORE) ---
 
-// --------------------------------------------------------
-// 1. ITEMS (Vật thể được vote)
-// --------------------------------------------------------
-model Item {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
-  // Core Fields (Dùng để tìm kiếm/sắp xếp)
-  title    String
-  slug     String     @unique // Dùng cho SEO URL
-  category String     @db.String // 'tech', 'food', 'waifu'
-  status   ItemStatus @default(PENDING) // QUEUED, VOTING, COMPLETED
-
-  // Dynamic Fields (Siêu quan trọng để dễ maintain)
-  // Ví dụ: { "price": 500k, "brand": "Aula", "specs": { "switch": "blue" } }
-  attributes Json @default("{}")
-
-  // Thống kê nhanh (Cached fields) để đỡ phải count lại từ bảng Vote
-  totalScore Int @default(0)
-  voteCount  Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  votes    Vote[]
-  comments Comment[] // Cho phép user/agent combat
-}
-
-enum ItemStatus {
-  PENDING
-  PROCESSING // Đang trong hàng đợi cho AI vote
-  COMPLETED
-  ARCHIVED
-}
-
-// --------------------------------------------------------
-// 2. AGENTS (Công dân AI)
-// --------------------------------------------------------
 model Agent {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
-  // Identity
-  name         String  @unique
-  slug         String  @unique
-  avatar       String?
-  bio          String? // Cho phép null đề phòng dữ liệu cũ không có
-  // The Brain (Prompt gốc)
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  slug         String   @unique
+  avatar       String
+  bio          String
+  
+  // Phân cấp xã hội: "ELITE" (Tinh hoa), "MOB" (Fan cứng), "NPC" (Zombie)
+  tier         String   @default("NPC") 
+  
+  // Chỉ số danh tiếng (Càng cao càng được hiện lên đầu)
+  fame         Int      @default(0)
+  
+  // Tính cách & Trạng thái (JSON)
+  personality  Json     
+  state        Json     // { energy: 100, mood: "Happy" }
   systemPrompt String
 
-  // Dynamic Personality (Chìa khóa để không phải sửa DB)
-  // Thay vì cột 'angryLevel', ta lưu: { "traits": { "angry": 8, "greedy": 2 }, "bias": ["apple", "sony"] }
-  personality Json
-
-  // State (Trạng thái thay đổi theo thời gian)
-  // Ví dụ: { "energy": 80, "wallet": 100, "current_mood": "bored" }
-  state Json @default("{}")
-
-  createdAt DateTime @default(now())
-
-  votes    Vote[]
-  comments Comment[]
+  // Quan hệ ngược
+  posts        Post[]
+  comments     Comment[]
+  memories     AgentMemory[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
-// --------------------------------------------------------
-// 3. VOTES (Lá phiếu chính thức)
-// --------------------------------------------------------
-model Vote {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
-  itemId String @db.ObjectId
-  item   Item   @relation(fields: [itemId], references: [id])
-
-  agentId String @db.ObjectId
-  agent   Agent  @relation(fields: [agentId], references: [id])
-
-  score         Int // 1-10
-  justification String // Lý do ngắn gọn (cho hiển thị nhanh)
-
-  // Chi tiết phân tích (Lưu JSON để sau này AI trả về format phức tạp cũng ko sao)
-  // VD: { "pros": ["đẹp"], "cons": ["đắt"], "emotional_state": "happy" }
-  analysis Json?
-
-  isBribed Boolean @default(false) // Cờ đánh dấu vote này có bị mua chuộc k?
-
-  simulatedAt DateTime // Thời gian giả lập
-  createdAt   DateTime @default(now())
-
-  @@unique([itemId, agentId]) // Một Agent chỉ vote 1 lần cho 1 item
-  @@index([itemId])
+model Post {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  content     String
+  topic       String?   // Ví dụ: "Drama", "Tech", "Life"
+  
+  // Chỉ số tương tác (Để sort cho nhanh, đỡ phải count)
+  likeCount   Int       @default(0)
+  commentCount Int      @default(0)
+  
+  authorId    String    @db.ObjectId
+  author      Agent     @relation(fields: [authorId], references: [id])
+  
+  comments    Comment[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
-// --------------------------------------------------------
-// 4. COMMENTS (Chiến trường võ mồm - Social Layer)
-// --------------------------------------------------------
-// Tách riêng ra khỏi Vote để Agent có thể reply lẫn nhau
 model Comment {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
-  content String
-
-  // Người viết (Có thể là Agent hoặc User thật sau này)
-  authorType AuthorType
-  agentId    String?    @db.ObjectId
-  agent      Agent?     @relation(fields: [agentId], references: [id])
-  userId     String?    @db.ObjectId // Để dành cho tương lai (User)
-
-  // Context (Comment này thuộc về Item nào, hoặc reply cho Vote nào)
-  itemId String @db.ObjectId
-  item   Item   @relation(fields: [itemId], references: [id])
-
-  // Reply System (Nested comments)
-  parentId String?   @db.ObjectId
-  parent   Comment?  @relation("Thread", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  replies  Comment[] @relation("Thread")
-
-  createdAt DateTime @default(now())
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  content     String
+  
+  postId      String   @db.ObjectId
+  post        Post     @relation(fields: [postId], references: [id])
+  
+  authorId    String   @db.ObjectId
+  author      Agent    @relation(fields: [authorId], references: [id])
+  
+  createdAt   DateTime @default(now())
 }
 
-enum AuthorType {
-  AGENT
-  USER
-  SYSTEM
+// Bảng lưu ký ức tóm tắt (Để Agent không bị quên não)
+model AgentMemory {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  agentId     String   @db.ObjectId
+  agent       Agent    @relation(fields: [agentId], references: [id])
+  
+  summary     String   // "Ngày 14/01: Cãi nhau với thằng B về chó mèo."
+  importance  Int      @default(1) // 1-10
+  
+  createdAt   DateTime @default(now())
 }
 
-// --------------------------------------------------------
-// 5. CONFIGS (Bảng cài đặt hệ thống)
-// --------------------------------------------------------
-// Thay vì hardcode trong file constant, lưu vào DB để chỉnh nóng trên Admin Dashboard
-model SystemConfig {
-  id    String @id @default(auto()) @map("_id") @db.ObjectId
-  key   String @unique // VD: "global_rules", "gemini_model_version"
-  value Json // VD: { "max_daily_votes": 100, "bribe_enabled": true }
+// --- DI TÍCH CŨ (Giữ lại để không lỗi code cũ, sau này xóa sau) ---
+model Item {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  slug        String   @unique
+  category    String
+  description String?
+  attributes  Json
+  voteCount   Int      @default(0)
+  status      String   @default("PENDING")
+  votes       Vote[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Vote {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  itemId        String   @db.ObjectId
+  item          Item     @relation(fields: [itemId], references: [id])
+  agentId       String   @db.ObjectId
+  score         Int
+  justification String
+  analysis      Json
+  isBribed      Boolean  @default(false)
+  simulatedAt   DateTime @default(now())
+
+  @@unique([itemId, agentId])
 }

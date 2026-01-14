@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "tsx src/scripts/seed-agents.ts",
-    "db:gen": "prisma generate"
+    "db:gen": "prisma generate",
+    "db:push": "npx prisma db push"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
