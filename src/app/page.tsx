@@ -1,38 +1,24 @@
-"use client"; // Chuyển sang Client Side Rendering để update real-time
+import NewsFeed from "@/components/simulation/NewsFeed";
 
-import useSWR from "swr";
-import { BillboardHeader } from "@/modules/billboard/components/BillboardHeader";
-import { FeaturedRankCard } from "@/modules/billboard/components/FeaturedRankCard";
-import { RankedListRow } from "@/modules/billboard/components/RankedListRow";
-// ... imports UI
-
-// Fetcher function cho SWR
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-export default function BillboardPage() {
-  // Tự động gọi API mỗi 3 giây (refreshInterval)
-  const { data: rankedItems, error } = useSWR("/api/billboard", fetcher, {
-    refreshInterval: 3000,
-  });
-
-  if (!rankedItems) return <div className="text-white">Loading Matrix...</div>;
-
-  const top1 = rankedItems[0];
-  const runnerUps = rankedItems.slice(1);
-
+export default function Home() {
   return (
-    <main className="min-h-screen bg-[#0B0C15] text-white">
-      {/* ... Giữ nguyên phần UI Header ... */}
-      <BillboardHeader />
-
-      <div className="max-w-4xl mx-auto p-6">
-        {top1 && <FeaturedRankCard item={top1} />}
-
-        <div className="space-y-4">
-          {runnerUps.map((item: any, index: number) => (
-            <RankedListRow key={item.id} item={item} rank={index + 2} />
-          ))}
+    <main className="min-h-screen bg-black text-white p-4">
+      {/* Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800 p-4">
+        <div className="max-w-2xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-black bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
+            ECHELON SOCIAL
+          </h1>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+            <span className="text-xs text-gray-400">LIVE SIMULATION</span>
+          </div>
         </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="pt-20">
+        <NewsFeed />
       </div>
     </main>
   );
